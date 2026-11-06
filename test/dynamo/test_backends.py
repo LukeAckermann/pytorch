@@ -837,7 +837,7 @@ class TestCustomBackendAPI(torch._dynamo.test_case.TestCase):
         def my_compiler(gm, example_inputs):
             nonlocal backend_run
             if tracing_context := torch._guards.TracingContext.try_get():
-                fw_metadata = tracing_context.fw_metadata
+                fw_metadata = tracing_context.compiler_metadata
                 params_flat = tracing_context.params_flat
                 self.assertTrue(fw_metadata is not None)
                 self.assertTrue(params_flat is not None)

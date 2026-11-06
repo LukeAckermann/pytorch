@@ -2975,20 +2975,20 @@ class _AutogradBackwardCompiler:
                 raise AssertionError(
                     f"expected TracingContext, got {type(self.lazy_backward_info.saved_context)}"
                 )
-            ddp_ctx = self.lazy_backward_info.saved_context.ddp_optimizer_ctx
+            ddp_ctx = self.lazy_backward_info.saved_context._ddp_optimizer_ctx
             if ddp_ctx is not None:
                 if ddp_ctx.curr_bucket < 0:
                     raise AssertionError(
                         "expected same # of fw and bw compiles, "
                         f"but found bucket {ddp_ctx.curr_bucket}"
                     )
-                curr_fw_meta = ddp_ctx.metadata_per_bucket[ddp_ctx.curr_bucket]
+                curr_fw_meta = ddp_ctx._metadata_per_bucket[ddp_ctx.curr_bucket]
                 # Note [DDPOptimizer and fw_metadata]
                 # When using the DDPOptimizer, we have a single dynamo graph (and TracingContext),
                 # but multiple AOTDispatcher graph.
                 #
                 # One consequence is that there will be **multiple** fw_metadata objects, one per AOT graph,
-                # which we stash the fw_metadata on the TracingContext.
+                # which we stash privately on the TracingContext.
                 #
                 # Normally what happens is that as we compile AOT graphs 1...N, we clobber the fw_metadata
                 # for graph i-1 when we start running AOT for graph i.
@@ -3004,23 +3004,13 @@ class _AutogradBackwardCompiler:
                 # - the metadata of all N graphs
                 # - the graph we are currently compiling in our DDPOptimizer region.
                 ddp_ctx.curr_bucket -= 1
-                self.lazy_backward_info.saved_context.fw_metadata = curr_fw_meta
+                self.lazy_backward_info.saved_context._fw_metadata = curr_fw_meta
 
         if not saved_tensors_use_once:
             self.fw_metadata.bw_donated_idxs = []
-            # Update bw_donated_idxs if using lazy_backward_info from `aot_dispatch_autograd`
-            if (
-                hasattr(self.lazy_backward_info, "saved_context")
-                and hasattr(self.lazy_backward_info.saved_context, "fw_metadata")
-                and hasattr(
-                    self.lazy_backward_info.saved_context.fw_metadata,  # type: ignore[union-attr]
-                    "bw_donated_idxs",
-                )
-            ):
-                self.lazy_backward_info.saved_context.fw_metadata.bw_donated_idxs = (  # type: ignore[union-attr]
-                    # pyrefly: ignore [implicit-any]
-                    []
-                )
+            saved_context = self.lazy_backward_info.saved_context
+            if saved_context is not None and saved_context._fw_metadata is not None:
+                saved_context._fw_metadata.bw_donated_idxs = []
 
 
 def _codegen_backward_prologue(

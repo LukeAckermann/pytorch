@@ -182,7 +182,7 @@ def propagate_dynamo_source(orig_gm: fx.GraphModule, split_gm: fx.GraphModule) -
 class DDPOptimizerContext:
     def __init__(self) -> None:
         self.curr_bucket: int = -1
-        self.metadata_per_bucket: list[ViewAndMutationMeta] = []
+        self._metadata_per_bucket: list[ViewAndMutationMeta] = []
 
 
 # compile each of the partitioned submodules using the user-provided compiler
@@ -201,7 +201,7 @@ class SubmodCompiler(torch.fx.interpreter.Interpreter):
         # See Note [DDPOptimizer and fw_metadata]
         ctx = torch._guards.TracingContext.try_get()
         if ctx is not None:
-            ctx.ddp_optimizer_ctx = DDPOptimizerContext()
+            ctx._ddp_optimizer_ctx = DDPOptimizerContext()
 
     def compile_submod(
         self, input_mod: fx.GraphModule, args: list[torch.Tensor], kwargs: Any
@@ -362,13 +362,13 @@ class SubmodCompiler(torch.fx.interpreter.Interpreter):
                         raise AssertionError("TracingContext must not be None")
                     # DDPOptimizer maintains 1 dynamo graph -> N AOT graphs
                     # Dynamo only has 1 tracing context, so it needs to maintain all N AOT metadata instances
-                    ddp_ctx = tracing_ctx.ddp_optimizer_ctx
+                    ddp_ctx = tracing_ctx._ddp_optimizer_ctx
                     if ddp_ctx is None:
                         raise AssertionError("ddp_optimizer_ctx must not be None")
-                    if tracing_ctx.fw_metadata is None:
+                    if tracing_ctx._fw_metadata is None:
                         raise AssertionError("fw_metadata must not be None")
                     ddp_ctx.curr_bucket += 1
-                    ddp_ctx.metadata_per_bucket.append(tracing_ctx.fw_metadata)
+                    ddp_ctx._metadata_per_bucket.append(tracing_ctx._fw_metadata)
 
                     out = compiled_submod_real(*new_args, **kwargs)
                     # output should be fake or subclass

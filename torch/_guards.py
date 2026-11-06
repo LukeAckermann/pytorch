@@ -40,7 +40,10 @@ if TYPE_CHECKING:
     from torch._dynamo.codegen import PyCodegen
     from torch._dynamo.guards import GuardCheckSpec
     from torch._dynamo.output_graph import CodeOptions
-    from torch._functorch._aot_autograd.schemas import ViewAndMutationMeta
+    from torch._functorch._aot_autograd.schemas import (
+        CompilerMetadata,
+        ViewAndMutationMeta,
+    )
     from torch._higher_order_ops.invoke_subgraph import NestedCompileRegionOptions
     from torch._subclasses.fake_tensor import FakeTensorMode
     from torch.types import IntLikeType
@@ -1126,10 +1129,11 @@ class TracingContext:
         # progress)
         self.loc_in_frame: tuple[str, int, str] | None = None
         self.loc_in_frame_positions: dis.Positions | None = None
-        # this is only set after aot_autograd
-        self.fw_metadata: ViewAndMutationMeta | None = None
+        # Internal full metadata for AOTAutograd and DDPOptimizer. Backends
+        # should use compiler_metadata instead.
+        self._fw_metadata: ViewAndMutationMeta | None = None
         # this is only set when the DDPOptimizer is used
-        self.ddp_optimizer_ctx: DDPOptimizerContext | None = None
+        self._ddp_optimizer_ctx: DDPOptimizerContext | None = None
         # this is only set after aot_autograd
         self.aot_graph_name: list[str] | None = None
         self.params_flat: list[Any] | None = None
@@ -1161,6 +1165,15 @@ class TracingContext:
         # list of code objects for inlined functions
         self.traced_code: list[CodeType] = []
         self.cudagraph_annotation: Any = None
+
+    @property
+    def compiler_metadata(self) -> CompilerMetadata | None:
+        """Return the limited metadata for the currently active AOT graph."""
+        if self._fw_metadata is None:
+            return None
+        from torch._functorch._aot_autograd.schemas import CompilerMetadata
+
+        return CompilerMetadata(self._fw_metadata)
 
     def clear(self) -> None:
         # Look at the note in output_graph.py in function `save_global_state`

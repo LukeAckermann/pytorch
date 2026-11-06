@@ -8097,7 +8097,7 @@ def forward(self, primals_1, tangents_1):
         captured = []
 
         def compiler(gm, example_inputs):
-            metadata = torch._guards.TracingContext.get().fw_metadata
+            metadata = torch._guards.TracingContext.get().compiler_metadata
             if metadata is None:
                 raise AssertionError("Expected forward metadata in compiler")
             captured.append(
