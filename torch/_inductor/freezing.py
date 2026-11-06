@@ -9,8 +9,7 @@ from typing import Any
 import torch
 import torch.utils._pytree as pytree
 from torch._dynamo.utils import dynamo_timed, lazy_format_graph_code
-from torch._functorch._aot_autograd.input_output_analysis import INPUT_ALIAS_TYPES
-from torch._functorch.aot_autograd import MutationType
+from torch._functorch._aot_autograd.schemas import CompilerMetadata
 from torch._functorch.compile_utils import fx_graph_cse
 from torch._inductor.constant_folding import constant_fold, replace_node_with_constant
 from torch._inductor.freezing_utils import enter_freezing, record_has_frozen_params
@@ -29,7 +28,7 @@ log = logging.getLogger(__name__)
 def replace_params_with_constants(
     gm: torch.fx.GraphModule,
     flat_params: list[Any],
-    fw_metadata: torch._functorch.aot_autograd.ViewAndMutationMeta,
+    compiler_metadata: CompilerMetadata,
 ) -> list[int]:
     """
     Replaces the parameters of a PyTorch GraphModule with constants wherever possible.
@@ -40,27 +39,18 @@ def replace_params_with_constants(
     preserved_arg_indices = []
     # Skipping the non-input index spaces matters here: an output-space base_idx
     # would preserve whichever parameter happened to share that number.
-    aliased_input_args = [
-        out_info.base_idx
-        for out_info in fw_metadata.output_info
-        if out_info.base_idx is not None and out_info.output_type in INPUT_ALIAS_TYPES
-    ]
+    aliased_input_args = compiler_metadata.aliased_input_indices
 
     # TODO (tmanlaibaatar) figure out why this is different
     # from mutated_inp_runtime_indices
-    mutated_inps = [
-        i
-        for i, m in enumerate(fw_metadata.input_info)
-        if m.mutation_type
-        in (MutationType.MUTATED_IN_GRAPH, MutationType.MUTATED_OUT_GRAPH)
-    ]
+    mutated_inps = compiler_metadata.mutated_input_indices
 
     static_indices_new = []
     static_indices_offset = 0
     for i, (real_input, node) in enumerate(zip(flat_params, fake_inp_nodes)):
         if i in mutated_inps or i in aliased_input_args:
             preserved_arg_indices.append(i)
-            if i in fw_metadata.static_input_indices:
+            if i in compiler_metadata.static_input_indices:
                 new_static_index = i - static_indices_offset
                 static_indices_new.append(new_static_index)
         else:
@@ -69,7 +59,7 @@ def replace_params_with_constants(
     # add on non param inputs
     preserved_arg_indices.extend(range(len(flat_params), len(params)))
     # is this necessary ?
-    fw_metadata.static_input_indices = static_indices_new
+    compiler_metadata.static_input_indices = static_indices_new
     gm.recompile()
     return preserved_arg_indices
 
@@ -109,17 +99,17 @@ def _freeze(
     view_to_reshape(aot_autograd_gm)
 
     if tracing_context := torch._guards.TracingContext.try_get():
-        fw_metadata = tracing_context.fw_metadata
+        compiler_metadata = tracing_context.compiler_metadata
         if tracing_context.params_flat_unwrap_subclasses is None:
             raise AssertionError(
                 "expected tracing_context.params_flat_unwrap_subclasses to be set"
             )
         params_flat = tracing_context.params_flat_unwrap_subclasses
-        if not (fw_metadata is not None and params_flat is not None):
-            raise AssertionError("expected fw_metadata and params_flat to be set")
+        if not (compiler_metadata is not None and params_flat is not None):
+            raise AssertionError("expected compiler_metadata and params_flat to be set")
 
         preserved_arg_indices = replace_params_with_constants(
-            aot_autograd_gm, params_flat, fw_metadata
+            aot_autograd_gm, params_flat, compiler_metadata
         )
     else:
         inputs = aot_autograd_gm.graph.find_nodes(op="placeholder")

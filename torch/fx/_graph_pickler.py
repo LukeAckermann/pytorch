@@ -943,7 +943,7 @@ class _TracingContextPickleData:
             context.force_unspec_int_unbacked_size_like
         )
         # Not saved (because it's difficult and maybe not needed?):
-        #   self.fw_metadata = context.fw_metadata
+        #   self._fw_metadata = context._fw_metadata
         #   self.guards_context = None
         #   self.global_context = None
         #   self.fake_mode = None

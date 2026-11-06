@@ -893,6 +893,47 @@ class ViewAndMutationMeta:
         )
 
 
+class CompilerMetadata:
+    """Live compiler-facing projections of AOTAutograd forward metadata."""
+
+    def __init__(self, metadata: ViewAndMutationMeta) -> None:
+        self._metadata = metadata
+
+    @property
+    def static_input_indices(self) -> list[int]:
+        return self._metadata.static_input_indices
+
+    @static_input_indices.setter
+    def static_input_indices(self, value: list[int]) -> None:
+        self._metadata.static_input_indices = value
+
+    @property
+    def num_mutated_inp_runtime_indices(self) -> int:
+        return self._metadata.num_mutated_inp_runtime_indices
+
+    @property
+    def bw_donated_idxs(self) -> list[int] | None:
+        return self._metadata.bw_donated_idxs
+
+    @property
+    def mutated_input_indices(self) -> tuple[int, ...]:
+        return tuple(
+            i
+            for i, info in enumerate(self._metadata.input_info)
+            if info.mutation_type
+            in (MutationType.MUTATED_IN_GRAPH, MutationType.MUTATED_OUT_GRAPH)
+        )
+
+    @property
+    def aliased_input_indices(self) -> tuple[int, ...]:
+        return tuple(
+            info.base_idx
+            for info in self._metadata.output_info
+            if info.base_idx is not None
+            and info.output_type in (OutputType.alias_of_input, OutputType.is_input)
+        )
+
+
 @dataclass(eq=False)
 class SubclassMeta:
     # A copy of all forward metadata, but computed on the *dense* tensor forward (after desugaring subclasses)

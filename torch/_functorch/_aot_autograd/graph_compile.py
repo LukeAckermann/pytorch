@@ -2883,7 +2883,7 @@ def _aot_stage2b_compile_forward_or_inference(
 
         # Set tracing context
         if tracing_context := torch._guards.TracingContext.try_get():
-            tracing_context.fw_metadata = _get_inner_meta(
+            tracing_context._fw_metadata = _get_inner_meta(
                 maybe_subclass_meta, fw_metadata
             )
 
